@@ -1,0 +1,47 @@
+{
+  "name": "@u2ai/subagent",
+  "version": "0.1.0-alpha",
+  "description": "Sub-agent system: a separate thread that runs an inherited role over the shared project.",
+  "type": "module",
+  "main": "./src/client/interface.js",
+  "exports": {
+    ".": "./src/client/interface.js",
+    "./protocol": "./src/client/protocol.js",
+    "./config": "./src/config/defaults.js"
+  },
+  "bin": {
+    "ai-subagent": "./bin/ai-subagent.js",
+    "ai-subagent-worker": "./bin/ai-subagent-worker.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/u2re-space/u2ai-subagent.git"
+  },
+  "homepage": "https://github.com/u2re-space/u2ai-subagent#readme",
+  "bugs": {
+    "url": "https://github.com/u2re-space/u2ai-subagent/issues"
+  },
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "start": "node bin/ai-subagent.js",
+    "test": "node --test --test-timeout=60000 \"test/*.test.js\""
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "subagent",
+    "agent",
+    "openai",
+    "responses-api",
+    "delegation"
+  ],
+  "license": "BSD-3-Clause"
+}
