@@ -15,7 +15,7 @@
  * @depends shared/utils
  * @usedBy client/interface, server/interface, config/parser
  * @exports normalizeSpec, specRole, specGoal, specFiles, specTools, specRights, specBudget,
- *          specModel, specTexts
+ *          specModel, specTexts, specOutput
  * @ai.tags subagent, spec, contract
  * @ai.hint pure
  */
@@ -40,6 +40,26 @@ export const DEFAULT_TOOLS = Object.freeze([
  * The budget of turns a sub-agent gets when the parent names none.
  */
 export const DEFAULT_TURNS = 8;
+
+/**
+ * The economy of the turns of a sub-agent.
+ *
+ * The parent writes down how much output the sub-agent may spend:
+ *
+ *   - `maxOutputTokens` — the cap of the turn, in output tokens. The cap of the model wins
+ *     over it, and the cap of the parent wins over the cap of the model.
+ *   - `models` — the caps the parent knows better than the table of the package:
+ *     `{ '<id>': { maxOutput: 65536 } }`.
+ *   - `writeGate` — whether the sub-agent has to open the write gate before it writes.
+ *     The gate is the turn of the inspection: it reads the project with a reduced budget,
+ *     says how big the write is expected to be, and the write turn gets the budget that
+ *     estimate earns.
+ */
+export const DEFAULT_OUTPUT = Object.freeze({
+    maxOutputTokens: null,
+    models: {},
+    writeGate: true,
+});
 
 /**
  * The model of a sub-agent: the model, the backend, the key and the effort.
@@ -111,6 +131,8 @@ export function normalizeSpec(raw = {}) {
             maxTurns: Math.max(1, intOf(budget.maxTurns, DEFAULT_TURNS)),
             timeoutMs: intOf(budget.timeoutMs, 0),
         },
+        // The economy of the turns: the cap of the output and the gate of the write.
+        output: normalizeOutput(source.output),
         // The name the parent gives the sub-agent, so the logs of the parent and the
         // report of the sub-agent speak about the same thread.
         name: textOf(source.name).trim(),
@@ -135,6 +157,52 @@ export function normalizeSpec(raw = {}) {
         // buffer carries its texts inside itself, the way it always did.
         shared: source.shared instanceof SharedArrayBuffer ? source.shared : null,
     };
+}
+
+/**
+ * The economy of the turns of a sub-agent: the cap of the output and the gate of the write.
+ *
+ * Every field has a default, and the wrong type never throws: a parent that names no cap
+ * gets the cap of the model, and a parent that names a cap the model cannot take gets the
+ * cap of the model instead (the cap is clamped, never refused).
+ *
+ * @param {unknown} value the economy of the spec
+ * @returns {{ maxOutputTokens: number|null, models: object, writeGate: boolean }}
+ * @exports
+ * @ai.hint pure
+ */
+export function normalizeOutput(value) {
+    const source = recordOf(value);
+    const models = recordOf(source.models);
+    const caps = {};
+    for (const [id, profile] of Object.entries(models)) {
+        const key = textOf(id).trim();
+        if (!key) continue;
+        const entry = recordOf(profile);
+        const cap = intOf(entry.maxOutput, 0);
+        const window = intOf(entry.window, 0);
+        if (cap <= 0 && window <= 0) continue;
+        caps[key] = {
+            ...(cap > 0 ? { maxOutput: cap } : {}),
+            ...(window > 0 ? { window } : {}),
+        };
+    }
+    return {
+        maxOutputTokens: intOf(source.maxOutputTokens, 0) > 0 ? intOf(source.maxOutputTokens, 0) : null,
+        models: caps,
+        writeGate: boolOf(source.writeGate, DEFAULT_OUTPUT.writeGate),
+    };
+}
+
+/**
+ * The economy of the turns of a sub-agent.
+ * @param {object} spec
+ * @returns {{ maxOutputTokens: number|null, models: object, writeGate: boolean }}
+ * @exports
+ * @ai.hint pure
+ */
+export function specOutput(spec) {
+    return normalizeOutput(spec?.output);
 }
 
 /**

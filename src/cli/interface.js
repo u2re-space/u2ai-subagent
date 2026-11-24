@@ -79,7 +79,7 @@ function intArg(value, fallback) {
  * @param {string[]} argv
  * @returns {{ goal: string, role: string, root: string, files: string[], turns: number,
  *   model: string, baseURL: string, env: string, worker: boolean, transport: string,
- *   instructions: string, quiet: boolean }}
+ *   instructions: string, quiet: boolean, maxOutputTokens: number|null, gate: boolean }}
  * @exports
  * @ai.hint pure
  */
@@ -98,6 +98,11 @@ export function parseArgs(argv = []) {
         transport: 'thread',
         instructions: '',
         quiet: false,
+        // The cap of the output of the turn: the cap of the model when the command names
+        // none.
+        maxOutputTokens: null,
+        // The gate of the write: it is on unless the command closes it.
+        gate: true,
     };
     for (let index = 0; index < list.length; index += 1) {
         const item = list[index];
@@ -117,6 +122,11 @@ export function parseArgs(argv = []) {
             out.env = textOf(list[++index]);
         } else if (item === '--instructions') {
             out.instructions = textOf(list[++index]);
+        } else if (item === '--max-output-tokens') {
+            const value = intArg(list[++index], 0);
+            out.maxOutputTokens = value > 0 ? value : null;
+        } else if (item === '--no-gate') {
+            out.gate = false;
         } else if (item === '--transport') {
             const value = textOf(list[++index]).trim().toLowerCase();
             out.transport = value === 'process' ? 'process' : 'thread';
@@ -146,7 +156,8 @@ export async function main(argv = [], options = {}) {
     const env = options.env ?? process.env;
     if (!args.goal) {
         out('The sub-agent needs a goal: ai-subagent "<what to do>" --role <role> [--root <dir>] '
-            + '[--files a.js,b.js] [--turns 8] [--model <model>] [--transport thread|process].');
+            + '[--files a.js,b.js] [--turns 8] [--model <model>] [--transport thread|process] '
+            + '[--max-output-tokens N] [--no-gate].');
         return 2;
     }
     const apiKey = textOf(env[args.env || 'ROUTERAI_API_KEY']) || textOf(env.OPENAI_API_KEY);
@@ -167,6 +178,8 @@ export async function main(argv = [], options = {}) {
         files: args.files,
         rights: { cwd: args.root, write: true },
         budget: { maxTurns: args.turns },
+        // The economy of the turns: the cap of the output and the gate of the write.
+        output: { maxOutputTokens: args.maxOutputTokens, writeGate: args.gate },
         model: {
             model: args.model || textOf(env.AI_WEBDEV_MODEL) || 'openai/gpt-6.1-terra',
             baseURL: args.baseURL || textOf(env.AI_WEBDEV_BASE_URL) || 'https://routerai.ru/api/v1',
@@ -180,6 +193,14 @@ export async function main(argv = [], options = {}) {
             if (event?.type !== 'status') return;
             const turn = event.turn ? ` (ход ${event.turn})` : '';
             const tools = Array.isArray(event.tools) && event.tools.length ? `: ${event.tools.join(', ')}` : '';
+            // The gate of the write: the run shows how much the write is going to get,
+            // so the economy of the work is visible and not a guess.
+            if (event.status === 'write_ready') {
+                const budget = Number(event.maxOutputTokens ?? 0);
+                const estimate = Number(event.outputTokens ?? 0);
+                out(`[${event.role}] ворота записи${turn}: ${estimate ? `оценка ${estimate} → ${budget}` : `весь потолок ${budget}`} токенов`);
+                return;
+            }
             out(`[${event.role}] ${event.status}${turn}${tools}`);
         };
         if (transport === 'thread') {

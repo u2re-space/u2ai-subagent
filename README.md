@@ -38,6 +38,48 @@ const report = await runSubAgent({
 The report says what the sub-agent did, which turns it spent and whether it reached the
 goal. The parent keeps the truth: the files of the goal are checked on the disk.
 
+## The economy of the turns
+
+A sub-agent spends the tokens of the model, and a write is the expensive part of the work:
+a turn that writes a big file costs as much as a turn that writes a small one. The
+sub-agent regulates its own budget with the **write gate**, the same way `ai-webdev` does.
+
+| Turn | Budget | Tools |
+|---|---|---|
+| The inspection | An eighth of the cap | The read tools and `write_ready` |
+| The write | What the estimate earns | The write tools |
+| The answer | The full cap | The answer, not the write |
+
+The gate is a tool of the loop, not a tool of the project: the parent never runs it, and it
+writes no file. The model calls it after the inspection, and it may name `outputTokens` —
+its own estimate of how many output tokens the write of the goal will take. The estimate
+sizes the budget of the write turn, and the run clamps it into a band between a quarter of
+the cap and the cap itself. A missing estimate, an estimate that is not a number, and an
+estimate that is not positive all mean the same thing: the model did not say how big the
+work is, so the write turn gets the whole cap. A model that says `0` or `-5` is saying
+"I do not know", not "write nothing".
+
+The estimate is a wish, not a fact, and the clamp is what makes it safe to take: a model
+that underestimates cannot starve its own write, and a model that overestimates cannot buy
+more than the cap.
+
+The parent writes the economy of the sub-agent down in the spec:
+
+```js
+{
+    output: {
+        maxOutputTokens: 32_000,                       // the cap of the parent
+        models: { 'google/gemini-4-hydrogen': { maxOutput: 16_384 } },  // the caps it knows
+        writeGate: false,                               // close the gate of the write
+    },
+}
+```
+
+The cap of the model wins over the cap of the parent, and the table of the package
+(`src/config/profiles.js`) knows the text models of the house. The report carries the
+estimate and the budget it earned, and the event `write_ready` says them to the parent as
+they happen.
+
 ## The transports
 
 | Transport | What it is | What crosses the border |
@@ -86,6 +128,8 @@ on the channel — that is what the transport `process` starts.
 | `--role`, `--root`, `--files`, `--turns` | The role, the project, the expected files, the budget. |
 | `--model`, `--base-url`, `--env` | The model of the API, the endpoint, the name of the variable of the key. |
 | `--instructions` | Extra instructions of the hand-over. |
+| `--max-output-tokens` | The cap of the output of the turn, in tokens. |
+| `--no-gate` | Close the write gate: the sub-agent writes without the turn of the inspection. |
 | `--transport thread\|process` | Where the sub-agent runs. |
 | `--worker` | Wait for the spec on the channel (the mode of a parent). |
 | `--quiet` | Only the report, without the events. |
@@ -100,6 +144,8 @@ on the channel — that is what the transport `process` starts.
 | `src/client/protocol.js` | The frames between the parent and the sub-agent. |
 | `src/server/interface.js` | The worker: the cycle of the model, the calls to the parent. |
 | `src/config/spec.js` | The spec: the role, the goal, the files, the rights, the budget. |
+| `src/config/profiles.js` | The table of the models: the cap of the output and the budget of the write. |
+| `src/agent/gate.js` | The write gate: the turn of the inspection and the estimate of the write. |
 | `src/shared/shared.js` | The shared memory: the texts and the flag of cancellation. |
 | `src/agent/core.js` | The cycle: the model asks, the parent executes, the model answers. |
 | `src/agent/tools.js` | The tools of a sub-agent and the rights over them. |

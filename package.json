@@ -8,6 +8,7 @@
     ".": "./src/client/interface.js",
     "./protocol": "./src/client/protocol.js",
     "./config": "./src/config/defaults.js",
+    "./profiles": "./src/config/profiles.js",
     "./shared": "./src/shared/shared.js"
   },
   "bin": {

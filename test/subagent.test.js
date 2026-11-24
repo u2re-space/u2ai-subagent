@@ -190,8 +190,8 @@ test('the sub-agent runs in a thread of the parent and calls its tools', async (
         request.on('data', (chunk) => { body += chunk; });
         request.on('end', () => {
             requests.push(JSON.parse(body));
-            // The first turn reads the file, the second writes the stylesheet, the third
-            // gives the final answer.
+            // The first turn reads the file and opens the write gate, the second writes the
+            // stylesheet, the third gives the final answer.
             const answer = requests.length === 1
                 ? {
                     status: 'completed',
@@ -200,9 +200,14 @@ test('the sub-agent runs in a thread of the parent and calls its tools', async (
                 : (requests.length === 2
                     ? {
                         status: 'completed',
-                        output: [{ type: 'function_call', id: 'fc-2', call_id: 'c-2', name: 'write_file', arguments: JSON.stringify({ path: 'styles.scss', content: 'body { color: #111; }\n' }) }],
+                        output: [{ type: 'function_call', id: 'fc-2', call_id: 'c-2', name: 'write_ready', arguments: '{}' }],
                     }
-                    : { status: 'completed', output_text: 'The stylesheet is written.' });
+                    : (requests.length === 3
+                        ? {
+                            status: 'completed',
+                            output: [{ type: 'function_call', id: 'fc-3', call_id: 'c-3', name: 'write_file', arguments: JSON.stringify({ path: 'styles.scss', content: 'body { color: #111; }\n' }) }],
+                        }
+                        : { status: 'completed', output_text: 'The stylesheet is written.' }));
             response.writeHead(200, { 'content-type': 'application/json' });
             response.end(JSON.stringify(answer));
         });
@@ -241,7 +246,7 @@ test('the sub-agent runs in a thread of the parent and calls its tools', async (
             onEvent: (event) => events.push(event),
         });
         assert.equal(report.ok, true);
-        assert.equal(report.turns, 3);
+        assert.equal(report.turns, 4);
         assert.deepEqual(calls, ['read_file', 'write_file']);
         assert.ok(events.some((event) => event?.status === 'working'));
         // The file of the goal is on the disk: the parent wrote it with its own tools.
