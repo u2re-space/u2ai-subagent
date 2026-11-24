@@ -123,6 +123,9 @@ export function normalizeSpec(raw = {}) {
             memory: textOf(source.context?.memory),
             skills: listOf(source.context?.skills),
             notes: textOf(source.context?.notes),
+            // The parts of the request of the parent: the picture of the reference travels
+            // with the work, so the sub-agent looks at the same target.
+            parts: Array.isArray(source.context?.parts) ? source.context.parts : [],
         },
     };
 }

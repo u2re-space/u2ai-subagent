@@ -167,7 +167,7 @@ export async function runSubAgent({ spec: rawSpec, client: given = null, onCall 
         timeoutMs: specModel(spec).timeoutMs,
     });
 
-    const items = [{ role: 'user', content: [textPart(subAgentGoal(spec))] }];
+    const items = [{ role: 'user', content: [textPart(subAgentGoal(spec)), ...(spec?.context?.parts ?? [])] }];
     const written = [];
     let turns = 0;
     let stopped = 'working';

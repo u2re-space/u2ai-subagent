@@ -254,6 +254,54 @@ test('the sub-agent runs in a thread of the parent and calls its tools', async (
     }
 });
 
+test('the picture of the reference travels with the work', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-subagent-reference-'));
+    const sent = [];
+    const server = createServer((request, response) => {
+        let body = '';
+        request.on('data', (chunk) => { body += chunk; });
+        request.on('end', () => {
+            sent.push(JSON.parse(body));
+            response.writeHead(200, { 'content-type': 'application/json' });
+            response.end(JSON.stringify({ status: 'completed', output_text: 'The reference is the same.' }));
+        });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    try {
+        // The picture of the reference: the same bytes the parent attaches to its request.
+        const png = Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+            'base64',
+        );
+        const report = await runSubAgentThread({
+            spec: {
+                name: 'styler-1',
+                role: { name: 'styler', instructions: 'You are the styler.', tools: [] },
+                goal: 'Look at the reference.',
+                rights: { cwd: root },
+                budget: { maxTurns: 3 },
+                model: {
+                    model: 'test-model',
+                    baseURL: `http://127.0.0.1:${port}/v1`,
+                    apiKey: 'k',
+                },
+                context: {
+                    parts: [{ type: 'input_image', image_url: `data:image/png;base64,${png.toString('base64')}` }],
+                },
+            },
+            onCall: async () => 'ok',
+        });
+        assert.equal(report.ok, true);
+        // The thread asked the API with the picture attached.
+        const content = sent[0]?.input?.[0]?.content ?? [];
+        assert.ok(content.some((part) => part?.type === 'input_image'), JSON.stringify(content));
+    } finally {
+        await new Promise((resolve) => server.close(resolve));
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 test('the arguments of the command are read', () => {
     const args = parseArgs(['Fix the header.', '--role', 'styler', '--root', '/project', '--files', 'a.scss,b.scss', '--turns', '3']);
     assert.equal(args.goal, 'Fix the header.');
