@@ -28,7 +28,8 @@
  * @ai.hint io
  */
 
-import { normalizeSpec, specBudget, specFiles, specGoal, specModel, specRights, specRole, specTools } from '../config/spec.js';
+import { normalizeSpec, specBudget, specFiles, specGoal, specModel, specRights, specRole, specTexts, specTools } from '../config/spec.js';
+import { FLAG_CANCEL, readSharedBlock } from '../shared/shared.js';
 import { buildModelBody, createModelClient } from '../openai/client.js';
 import { textPart } from '../openai/parser.js';
 import { intOf, textOf } from '../shared/utils.js';
@@ -47,9 +48,12 @@ import { intOf, textOf } from '../shared/utils.js';
  */
 export function subAgentInstructions(spec) {
     const blocks = [];
-    const inherited = textOf(spec?.role?.instructions).trim();
+    // The texts of the hand-over: from the shared memory, when the parent gave a buffer,
+    // or from the spec itself.
+    const texts = specTexts(spec);
+    const inherited = texts.instructions.trim();
     if (inherited) blocks.push(inherited);
-    const shared = textOf(spec?.context?.notes).trim();
+    const shared = texts.notes.trim();
     if (shared) blocks.push(shared);
     return blocks.join('\n\n');
 }
@@ -175,8 +179,18 @@ export async function runSubAgent({ spec: rawSpec, client: given = null, onCall 
     let error = null;
 
     try {
+        // The flag of cancellation lives in the shared memory, when the parent gave a
+        // buffer: the parent sets it with an atomic store, and the thread sees it here
+        // without a message round trip.
+        const shared = spec?.shared instanceof SharedArrayBuffer ? readSharedBlock(spec.shared) : null;
         while (turns < budget.maxTurns) {
             if (signal?.aborted) {
+                stopped = 'aborted';
+                break;
+            }
+            if (shared?.cancelled()) {
+                // The parent asked the sub-agent to stop: it winds down and still reports
+                // what it did.
                 stopped = 'aborted';
                 break;
             }

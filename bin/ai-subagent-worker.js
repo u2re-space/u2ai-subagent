@@ -2,18 +2,19 @@
 /**
  * @file bin/ai-subagent-worker.js
  * @module bin/ai-subagent-worker
- * @purpose The worker of a sub-agent: the thread that runs the cycle of the model.
+ * @purpose The worker of a sub-agent: the thread or the process that runs the cycle.
  *
- *   The worker is started by the parent, not by a person: it takes the spec of the
- *   sub-agent from the data of the thread, runs the cycle of the model and sends the
- *   calls of the tools back to the parent. The parent holds the tools and the rights,
- *   and the worker holds nothing but the conversation of the sub-agent.
+ *   As a thread of the parent, the spec comes with the thread. As a process of its own
+ *   (`ai-subagent --worker`), the spec comes with the first frame of the channel. Both
+ *   carry the same cycle of the model, and both send the calls of the tools back to the
+ *   parent: the worker never touches a file by itself.
  *
  * @depends server/interface
- * @usedBy client/interface
+ * @usedBy client/interface, bin/ai-subagent
  * @ai.tags subagent, worker
  * @ai.hint io
  */
+import { parentPort } from 'node:worker_threads';
 import { workerMain } from '../src/server/interface.js';
 
-await workerMain();
+await workerMain({ port: parentPort });

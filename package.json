@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/client/interface.js",
     "./protocol": "./src/client/protocol.js",
-    "./config": "./src/config/defaults.js"
+    "./config": "./src/config/defaults.js",
+    "./shared": "./src/shared/shared.js"
   },
   "bin": {
     "ai-subagent": "./bin/ai-subagent.js",

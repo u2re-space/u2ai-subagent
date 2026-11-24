@@ -14,13 +14,15 @@
  *
  * @depends shared/utils
  * @usedBy client/interface, server/interface, config/parser
- * @exports normalizeSpec, specRole, specGoal, specFiles, specTools, specRights, specBudget
+ * @exports normalizeSpec, specRole, specGoal, specFiles, specTools, specRights, specBudget,
+ *          specModel, specTexts
  * @ai.tags subagent, spec, contract
  * @ai.hint pure
  */
 
 import { boolOf, intOf, listOf, recordOf, textOf, unique } from '../shared/utils.js';
 import { SPEC_VERSION } from '../client/protocol.js';
+import { readSharedBlock } from '../shared/shared.js';
 
 /**
  * The tools a sub-agent may call when the parent names none.
@@ -127,6 +129,11 @@ export function normalizeSpec(raw = {}) {
             // with the work, so the sub-agent looks at the same target.
             parts: Array.isArray(source.context?.parts) ? source.context.parts : [],
         },
+        // The shared memory of the hand-over: the big texts of the spec (the instructions
+        // of the role, the notes of the context) live in one buffer the parent wrote, and
+        // the thread reads them from there instead of a copy. A spec that carries no
+        // buffer carries its texts inside itself, the way it always did.
+        shared: source.shared instanceof SharedArrayBuffer ? source.shared : null,
     };
 }
 
@@ -161,6 +168,33 @@ export function specGoal(spec) {
  */
 export function specFiles(spec) {
     return listOf(spec?.files);
+}
+
+/**
+ * The texts of the spec: from the shared memory, when the parent gave a buffer, or from
+ * the spec itself.
+ *
+ * The shared buffer holds the big texts of a hand-over — the instructions of the role and
+ * the notes of the context. A thread reads them from there instead of a copy: one buffer,
+ * one copy in the memory.
+ *
+ * @param {object} spec the spec of the sub-agent
+ * @returns {{ instructions: string, notes: string }}
+ * @exports
+ * @ai.hint pure
+ */
+export function specTexts(spec) {
+    const shared = spec?.shared instanceof SharedArrayBuffer ? readSharedBlock(spec.shared) : null;
+    if (shared) {
+        return {
+            instructions: shared.text('instructions') || textOf(spec?.role?.instructions),
+            notes: shared.text('notes') || textOf(spec?.context?.notes),
+        };
+    }
+    return {
+        instructions: textOf(spec?.role?.instructions),
+        notes: textOf(spec?.context?.notes),
+    };
 }
 
 /**

@@ -5,12 +5,13 @@ import path from 'node:path';
 import { createServer } from 'node:http';
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 
-import { normalizeSpec, specTools, specRights, specBudget } from '../src/config/spec.js';
+import { normalizeSpec, specTools, specRights, specBudget, specTexts } from '../src/config/spec.js';
 import { runSubAgent } from '../src/agent/core.js';
 import { runSubAgent as runSubAgentThread } from '../src/client/interface.js';
 import { createModelClient, buildModelBody } from '../src/openai/client.js';
 import { parseModelAnswer } from '../src/openai/parser.js';
 import { createFrame, isFrame, FRAME } from '../src/client/protocol.js';
+import { createSharedBlock, readSharedBlock, sharedAvailable, SHARED_MAGIC } from '../src/shared/shared.js';
 import { toolExecutor, parseArgs } from '../src/cli/interface.js';
 
 /** The requests the fake API of the test received. */
@@ -300,6 +301,90 @@ test('the picture of the reference travels with the work', async () => {
         await new Promise((resolve) => server.close(resolve));
         await rm(root, { recursive: true, force: true });
     }
+});
+
+test('the instructions of a hand-over travel in shared memory', () => {
+    assert.equal(sharedAvailable(), true, 'Node 26 always offers SharedArrayBuffer');
+    const instructions = 'You are the styler of a web project.'.repeat(400);
+    const notes = 'The brief of the architect.'.repeat(200);
+    const { buffer, regions } = createSharedBlock({ instructions, notes });
+    assert.deepEqual(regions, ['instructions', 'notes']);
+
+    // The thread reads the texts from the buffer: the same bytes, the same text.
+    const shared = readSharedBlock(buffer);
+    assert.equal(shared.text('instructions'), instructions);
+    assert.equal(shared.text('notes'), notes);
+    assert.equal(shared.text('absent'), '');
+
+    // The flag of cancellation: the parent sets it, the thread sees it.
+    assert.equal(shared.cancelled(), false);
+    shared.cancel();
+    assert.equal(shared.cancelled(), true);
+
+    // A buffer with a wrong mark is refused.
+    const fake = new SharedArrayBuffer(64);
+    new Int32Array(fake)[0] = SHARED_MAGIC + 1;
+    assert.throws(() => readSharedBlock(fake), /wrong mark/);
+});
+
+test('the spec of a sub-agent reads its texts from the shared memory', () => {
+    const instructions = 'The instructions from the shared buffer.';
+    const notes = 'The notes from the shared buffer.';
+    const { buffer } = createSharedBlock({ instructions, notes });
+    const texts = specTexts({
+        role: { name: 'styler', instructions: 'The instructions of the spec.' },
+        context: { notes: 'The notes of the spec.' },
+        shared: buffer,
+    });
+    // The buffer wins over the spec: one copy in the memory.
+    assert.equal(texts.instructions, instructions);
+    assert.equal(texts.notes, notes);
+    // Without a buffer the texts come from the spec, the way they always did.
+    const plain = specTexts({
+        role: { name: 'styler', instructions: 'The instructions of the spec.' },
+        context: { notes: 'The notes of the spec.' },
+    });
+    assert.equal(plain.instructions, 'The instructions of the spec.');
+    assert.equal(plain.notes, 'The notes of the spec.');
+});
+
+test('the cycle of a sub-agent reads the instructions from the shared memory and stops on the flag', async () => {
+    const instructions = 'You are the coder of the shared buffer.';
+    const { buffer } = createSharedBlock({ instructions, notes: '' });
+    const bodies = [];
+    let turn = 0;
+    const client = {
+        config: { model: 'test-model' },
+        async request(body) {
+            bodies.push(body);
+            turn += 1;
+            if (turn === 1) {
+                return parseModelAnswer({
+                    status: 'completed',
+                    output: [{ type: 'function_call', id: 'fc-1', call_id: 'c-1', name: 'read_file', arguments: '{}' }],
+                });
+            }
+            return parseModelAnswer({ status: 'completed', output_text: 'done' });
+        },
+    };
+    const report = await runSubAgent({
+        spec: {
+            role: { name: 'coder', tools: ['read_file'] },
+            goal: 'Do the work.',
+            shared: buffer,
+        },
+        client,
+        onCall: async () => {
+            // The parent asks the sub-agent to stop while the tool runs.
+            readSharedBlock(buffer).cancel();
+            return 'ok';
+        },
+    });
+    // The instructions came from the shared buffer, not from the spec.
+    assert.equal(bodies[0].instructions, instructions);
+    // The flag stopped the cycle between the turns: the report says so.
+    assert.equal(report.stopped, 'aborted');
+    assert.equal(report.ok, false);
 });
 
 test('the arguments of the command are read', () => {
