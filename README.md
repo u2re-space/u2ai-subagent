@@ -112,6 +112,40 @@ await runSubAgent({
 });
 ```
 
+## The bytes
+
+A tool of a sub-agent may answer with bytes as well as with text: a picture does not have
+to touch the disk to reach the worker. The bytes travel in their own frame — a buffer that
+moves without a copy — or as base64, for the transport that cannot move a buffer.
+
+```js
+import { bytesFrame, base64Frame, bytesOfFrame } from '@u2ai/subagent/protocol';
+
+const { frame, transfer } = bytesFrame(picture, { name: 'hero.png', mime: 'image/png' });
+worker.postMessage(frame, transfer);   // the thread: the buffer moves
+worker.send(base64Frame(picture));     // the process: the bytes go as text
+```
+
+A `Buffer` of the pool of Node.js may not be transferred: the bytes get their own buffer
+first.
+
+## The ramdisk
+
+The tmp cache of the house: a file system in the memory and a cache of bytes that the
+parent and the worker share.
+
+```js
+import { createRamdisk, createRamdiskFileSystem, allocateMemory } from '@u2ai/subagent/ramdisk';
+
+const ramdisk = createRamdisk({ cacheBytes: 256 * 1024 * 1024 });
+ramdisk.cache.write(picture);          // the parent writes, the worker reads the same bytes
+
+const block = allocateMemory({ bytes: 4 * 1024 * 1024 * 1024 });  // 4 GB of address space
+```
+
+The block is virtual memory: the pages are taken when the bytes are written, not when the
+block is made, so a big ceiling costs nothing until it is used.
+
 ## The command
 
 ```
@@ -147,6 +181,9 @@ on the channel — that is what the transport `process` starts.
 | `src/config/profiles.js` | The table of the models: the cap of the output and the budget of the write. |
 | `src/agent/gate.js` | The write gate: the turn of the inspection and the estimate of the write. |
 | `src/shared/shared.js` | The shared memory: the texts and the flag of cancellation. |
+| `src/shared/protocol.js` | The frames and the bytes: the buffer that moves, the base64 that does not. |
+| `src/shared/worker.js` | The runtime of the worker: the transports, the channel, the cycle. |
+| `src/access/ramdisk.js` | The tmp cache of the house: the file system in the memory, the block of the memory. |
 | `src/agent/core.js` | The cycle: the model asks, the parent executes, the model answers. |
 | `src/agent/tools.js` | The tools of a sub-agent and the rights over them. |
 | `src/openai/` | The client of the model and the parser of its answers. |

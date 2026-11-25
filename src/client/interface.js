@@ -82,8 +82,15 @@ export function startWorker(spec, options = {}) {
             stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
             windowsHide: true,
         });
+        // The spec comes with the first frame: the process has no `workerData`, and the
+        // worker waits for it. Without this frame the worker waits forever.
+        try { child.send(createFrame('spawn', { spec })); } catch { /* The child is gone. */ }
         return {
             post: (frame) => {
+                if (!child.connected) return;
+                try { child.send(frame); } catch { /* The worker is gone. */ }
+            },
+            postBytes: (frame) => {
                 if (!child.connected) return;
                 try { child.send(frame); } catch { /* The worker is gone. */ }
             },
@@ -107,6 +114,7 @@ export function startWorker(spec, options = {}) {
     });
     return {
         post: (frame) => worker.postMessage(frame),
+        postBytes: (frame, transfer = []) => worker.postMessage(frame, transfer),
         on: (kind, fn) => worker.on(kind, fn),
         off: (kind, fn) => worker.off?.(kind, fn),
         stop: () => { worker.terminate?.(); },

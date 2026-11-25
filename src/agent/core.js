@@ -114,8 +114,9 @@ export function subAgentGoal(spec) {
  * and not a tool of the project, and the parent does not know it.
  *
  * @param {{ spec: object, client: object, items: object[], signal?: AbortSignal|null,
- *   onCall?: Function|null, writeReady?: boolean, maxOutputTokens?: number|null,
- *   tools?: string[]|null, intercept?: Function|null, schema?: object|null }} request
+ *   onCall?: Function|null, onBytes?: Function|null, writeReady?: boolean,
+ *   maxOutputTokens?: number|null, tools?: string[]|null, intercept?: Function|null,
+ *   schema?: object|null }} request
  * @returns {Promise<{ answer: object, calls: object[], results: object[] }>}
  * @exports
  * @ai.hint io
@@ -126,6 +127,7 @@ export async function subAgentTurn({
     items,
     signal = null,
     onCall = null,
+    onBytes = null,
     writeReady = false,
     maxOutputTokens = null,
     tools = null,
@@ -163,7 +165,17 @@ export async function subAgentTurn({
             continue;
         }
         const output = await onCall?.(call);
-        results.push({ call, output: textOf(output) });
+        // The tool may answer with bytes as well as with text: a picture travels in its
+        // own frame, and the text of the answer names it.
+        const bytes = output?.bytes ?? null;
+        if (bytes && typeof onBytes === 'function') {
+            await onBytes(bytes, { name: output?.name ?? '', mime: output?.mime ?? '' });
+        }
+        results.push({
+            call,
+            output: bytes ? textOf(output?.text) : textOf(output),
+            bytes: bytes ?? null,
+        });
     }
     return { answer, calls, results };
 }
@@ -179,13 +191,13 @@ export async function subAgentTurn({
  * the write turn has the budget the estimate of the model earned, and the answer turn
  * has the full one.
  *
- * @param {{ spec: object, client?: object, onCall?: Function|null, onEvent?: Function|null,
- *   signal?: AbortSignal|null }} request
+ * @param {{ spec: object, client?: object, onCall?: Function|null, onBytes?: Function|null,
+ *   onEvent?: Function|null, signal?: AbortSignal|null }} request
  * @returns {Promise<object>} the report of the sub-agent
  * @exports
  * @ai.hint io
  */
-export async function runSubAgent({ spec: rawSpec, client: given = null, onCall = null, onEvent = null, signal = null } = {}) {
+export async function runSubAgent({ spec: rawSpec, client: given = null, onCall = null, onBytes = null, onEvent = null, signal = null } = {}) {
     const spec = normalizeSpec(rawSpec);
     const budget = specBudget(spec);
     const rights = specRights(spec);
@@ -346,6 +358,7 @@ export async function runSubAgent({ spec: rawSpec, client: given = null, onCall 
                 items,
                 signal,
                 onCall,
+                onBytes,
                 writeReady,
                 maxOutputTokens,
                 tools: turnTools,

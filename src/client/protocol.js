@@ -15,59 +15,26 @@
  *   The sub-agent carries no role of its own: the role, the rights and the tools come in
  *   the spec and belong to the parent. The sub-agent only runs them.
  *
- * @depends none
+ *   The contract itself lives in `shared/protocol` — the same file in every package of the
+ *   house. This module is the public path of it.
+ *
+ * @depends shared/protocol
  * @usedBy client/interface, server/interface
- * @exports PROTOCOL_VERSION, FRAME, createFrame, isFrame, SPEC_VERSION
- * @ai.tags subagent, protocol, ipc
+ * @exports PROTOCOL_VERSION, SPEC_VERSION, FRAME, createFrame, isFrame, bytesFrame,
+ *          base64Frame, bytesOfFrame, base64Of, bytesOf
+ * @ai.tags house, protocol, ipc
  * @ai.hint pure
  */
 
-/** The version of the protocol between a parent and a sub-agent. */
-export const PROTOCOL_VERSION = 1;
-
-/** The version of the spec of a sub-agent. */
-export const SPEC_VERSION = 1;
-
-/** The kinds of frame of the protocol. */
-export const FRAME = Object.freeze({
-    spawn: 'spawn',
-    ready: 'ready',
-    status: 'status',
-    log: 'log',
-    file: 'file',
-    call: 'call',
-    result: 'result',
-    report: 'report',
-    error: 'error',
-    stop: 'stop',
-});
-
-/**
- * Create one frame of the protocol.
- * @param {string} type the kind of the frame
- * @param {object} [payload] the fields of the frame
- * @returns {object}
- * @exports
- * @ai.hint pure
- */
-export function createFrame(type, payload = {}) {
-    const kind = String(type ?? '').trim();
-    if (!Object.hasOwn(FRAME, kind)) throw new Error(`Unknown subagent frame: ${kind || '(empty)'}.`);
-    return { v: PROTOCOL_VERSION, type: kind, ...payload };
-}
-
-/**
- * Whether a value is a frame of this protocol version.
- * @param {unknown} value
- * @returns {boolean}
- * @exports
- * @ai.hint pure
- */
-export function isFrame(value) {
-    return Boolean(value)
-        && typeof value === 'object'
-        && !Array.isArray(value)
-        && Number(value.v) === PROTOCOL_VERSION
-        && typeof value.type === 'string'
-        && Object.hasOwn(FRAME, value.type);
-}
+export {
+    PROTOCOL_VERSION,
+    SPEC_VERSION,
+    FRAME,
+    createFrame,
+    isFrame,
+    bytesFrame,
+    base64Frame,
+    bytesOfFrame,
+    base64Of,
+    bytesOf,
+} from '../shared/protocol.js';

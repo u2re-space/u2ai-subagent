@@ -1,11 +1,11 @@
 /**
  * @file src/shared/shared.js
  * @module shared/shared
- * @purpose Shared memory between the parent and the thread of a sub-agent.
+ * @purpose Shared memory between the parent and the thread of a worker.
  *
  *   The instructions of a role are the biggest text of a hand-over: the brief of the
  *   architect, the packs of the skills, the contracts — tens of kilobytes that the parent
- *   built and the sub-agent has to read. A structured clone copies them into the thread a
+ *   built and the worker has to read. A structured clone copies them into the thread a
  *   second time. Shared memory does not: the parent writes the text into one buffer, the
  *   thread reads it from there, and there is exactly one copy in the memory.
  *
@@ -13,24 +13,24 @@
  *   reads it back. Strings never cross the border as strings.
  *
  *   The buffer also holds the flag of cancellation: the parent sets it with an atomic
- *   store, and the thread sees it without a message round trip — a sub-agent that was
+ *   store, and the thread sees it without a message round trip — a worker that was
  *   stopped winds down and still reports what it did.
  *
  *   Shared memory crosses threads, not processes: the transport `process` carries the
  *   strings inside the spec, and this module is not used there.
  *
- * @depends shared/utils
+ * @depends none
  * @usedBy client/interface, server/interface
  * @exports SHARED_MAGIC, SHARED_VERSION, SHARED_REGIONS, FLAG_CANCEL, sharedAvailable,
  *          createSharedBlock, readSharedBlock
- * @ai.tags subagent, shared-memory, threads
+ * @ai.tags house, shared-memory, threads
  * @ai.hint io
  */
 
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder();
 
-/** The mark of a shared block of the sub-agent. */
+/** The mark of a shared block of the worker. */
 export const SHARED_MAGIC = 0x53484231; // 'SHB1'
 
 /** The version of the layout of a shared block. */
@@ -39,12 +39,12 @@ export const SHARED_VERSION = 1;
 /**
  * The named regions of a shared block, in the order they lie in it.
  *
- * `instructions` — the instructions of the role the sub-agent inherits. `notes` — the
+ * `instructions` — the instructions of the role the worker inherits. `notes` — the
  * notes of the context the parent shares. Both are the big texts of a hand-over.
  */
 export const SHARED_REGIONS = Object.freeze(['instructions', 'notes']);
 
-/** The parent asks the sub-agent to stop after the current turn. */
+/** The parent asks the worker to stop after the current turn. */
 export const FLAG_CANCEL = 1;
 
 /** The index of the flag word inside the header. */
@@ -131,13 +131,13 @@ export function createSharedBlock(strings = {}) {
  */
 export function readSharedBlock(buffer) {
     if (!(buffer instanceof SharedArrayBuffer)) {
-        throw new Error('The shared block of a sub-agent is not a SharedArrayBuffer.');
+        throw new Error('The shared block of a worker is not a SharedArrayBuffer.');
     }
     const words = new Int32Array(buffer);
-    if (words[0] !== SHARED_MAGIC) throw new Error('The shared block of a sub-agent has a wrong mark.');
-    if (words[1] !== SHARED_VERSION) throw new Error('The shared block of a sub-agent has a wrong version.');
+    if (words[0] !== SHARED_MAGIC) throw new Error('The shared block of a worker has a wrong mark.');
+    if (words[1] !== SHARED_VERSION) throw new Error('The shared block of a worker has a wrong version.');
     const count = words[3];
-    if (count !== SHARED_REGIONS.length) throw new Error('The shared block of a sub-agent has a wrong layout.');
+    if (count !== SHARED_REGIONS.length) throw new Error('The shared block of a worker has a wrong layout.');
 
     const table = SHARED_REGIONS.map((name, index) => ({
         name,
@@ -158,14 +158,14 @@ export function readSharedBlock(buffer) {
             return DECODER.decode(new Uint8Array(buffer, region.offset, region.length));
         },
         /**
-         * Did the parent ask the sub-agent to stop?
+         * Did the parent ask the worker to stop?
          * @returns {boolean}
          */
         cancelled() {
             return Atomics.load(words, FLAG_WORD) === FLAG_CANCEL;
         },
         /**
-         * Ask the sub-agent to stop after the current turn.
+         * Ask the worker to stop after the current turn.
          * @returns {void}
          */
         cancel() {

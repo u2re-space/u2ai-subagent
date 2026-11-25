@@ -9,7 +9,9 @@
     "./protocol": "./src/client/protocol.js",
     "./config": "./src/config/defaults.js",
     "./profiles": "./src/config/profiles.js",
-    "./shared": "./src/shared/shared.js"
+    "./shared": "./src/shared/shared.js",
+    "./worker": "./src/shared/worker.js",
+    "./ramdisk": "./src/access/ramdisk.js"
   },
   "bin": {
     "ai-subagent": "./bin/ai-subagent.js",

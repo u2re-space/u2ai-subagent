@@ -24,7 +24,7 @@
 
 import { parentPort, workerData } from 'node:worker_threads';
 import { runSubAgent } from '../agent/core.js';
-import { createFrame } from '../client/protocol.js';
+import { createFrame, bytesFrame } from '../client/protocol.js';
 import { textOf } from '../shared/utils.js';
 
 /**
@@ -53,7 +53,11 @@ export function channelOf(port = null) {
     // A process: the channel speaks send, and it closes with the process.
     return {
         post: (frame) => {
-            if (typeof raw.send !== 'function' || !raw.connected) return;
+            if (typeof raw.send !== 'function' || raw.connected === false) return;
+            try { raw.send(frame); } catch { /* The parent is gone. */ }
+        },
+        postBytes: (frame) => {
+            if (typeof raw.send !== 'function' || raw.connected === false) return;
             try { raw.send(frame); } catch { /* The parent is gone. */ }
         },
         on: (fn) => raw.on('message', fn),
@@ -96,6 +100,21 @@ export async function runWorker({ spec, port = null, client = null, signal = nul
         return await answer;
     };
 
+    /**
+     * The bytes of a tool: they travel in their own frame, so a picture never goes
+     * through the file system.
+     *
+     * @param {Uint8Array|Buffer} payload the bytes
+     * @param {{ name?: string, mime?: string }} [meta] what the bytes are
+     * @returns {void}
+     * @ai.hint io
+     */
+    const onBytes = (payload, meta = {}) => {
+        if (closed) return;
+        const { frame, transfer } = bytesFrame(payload, meta);
+        channel.postBytes?.(frame, transfer);
+    };
+
     const onMessage = (frame) => {
         if (!frame || frame.type !== 'result') return;
         const resolve = pending.get(textOf(frame.id));
@@ -111,7 +130,7 @@ export async function runWorker({ spec, port = null, client = null, signal = nul
 
     let report;
     try {
-        report = await runSubAgent({ spec, client, onCall, onEvent, signal });
+        report = await runSubAgent({ spec, client, onCall, onBytes, onEvent, signal });
     } catch (error) {
         report = {
             ok: false,

@@ -400,3 +400,59 @@ test('the arguments of the command are read', () => {
     assert.deepEqual(args.files, ['a.scss', 'b.scss']);
     assert.equal(args.turns, 3);
 });
+
+test('the sub-agent runs in a process of the parent and calls its tools', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ai-subagent-process-'));
+    const asked = [];
+    const server = createServer((request, response) => {
+        let body = '';
+        request.on('data', (chunk) => { body += chunk; });
+        request.on('end', () => {
+            asked.push(JSON.parse(body));
+            const answer = asked.length === 1
+                ? {
+                    status: 'completed',
+                    output: [{ type: 'function_call', id: 'fc-1', call_id: 'c-1', name: 'read_file', arguments: JSON.stringify({ path: 'note.txt' }) }],
+                }
+                : { status: 'completed', output_text: 'The note is read.' };
+            response.writeHead(200, { 'content-type': 'application/json' });
+            response.end(JSON.stringify(answer));
+        });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    try {
+        await writeFile(path.join(root, 'note.txt'), 'hello from the parent\n', 'utf8');
+        const callsInProcess = [];
+        const report = await runSubAgentThread({
+            spec: {
+                name: 'reader-1',
+                role: { name: 'reader', instructions: 'You are the reader.', tools: ['read_file'] },
+                goal: 'Read the note.',
+                files: ['note.txt'],
+                rights: { cwd: root, write: false },
+                budget: { maxTurns: 4 },
+                model: {
+                    model: 'test-model',
+                    baseURL: `http://127.0.0.1:${port}/v1`,
+                    apiKey: 'test-key',
+                    effort: 'low',
+                },
+            },
+            // The process transport: the spec travels in the first frame, and the shared
+            // memory does not cross the border of the process.
+            transport: 'process',
+            onCall: async (call) => {
+                callsInProcess.push(call.name);
+                const { readText } = await import('../src/access/fs.js');
+                if (call.name === 'read_file') return await readText(root, call.arguments.path);
+                return 'unknown tool';
+            },
+        });
+        assert.equal(report.ok, true);
+        assert.deepEqual(callsInProcess, ['read_file']);
+    } finally {
+        await new Promise((resolve) => server.close(resolve));
+        await rm(root, { recursive: true, force: true });
+    }
+});
