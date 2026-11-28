@@ -32,6 +32,7 @@ import { normalizeSpec, specBudget, specFiles, specGoal, specModel, specOutput, 
 import { maxOutputFor, writeBudgetFor } from '../config/profiles.js';
 import { FLAG_CANCEL, readSharedBlock } from '../shared/shared.js';
 import { buildModelBody, createModelClient } from '../openai/client.js';
+import { codeModeToolSpec, CODE_MODE_TOOL } from './code-mode.js';
 import { textPart } from '../openai/parser.js';
 import { textOf } from '../shared/utils.js';
 import {
@@ -141,12 +142,16 @@ export async function subAgentTurn({
         tools: (tools ?? specTools(spec)).map((name) => (
             // The gate has its own spec: the model has to know that it may name the
             // estimate of the write.
-            name === WRITE_READY_NAME ? WRITE_READY_TOOL : {
-                type: 'function',
-                name,
-                description: `The tool ${name} of the project.`,
-                parameters: { type: 'object', properties: {}, additionalProperties: true },
-            }
+            name === WRITE_READY_NAME ? WRITE_READY_TOOL
+                // Code Mode has its own spec too: the model writes a program, and it has
+                // to know what the program may call and what it may not.
+                : name === CODE_MODE_TOOL ? codeModeToolSpec()
+                    : {
+                        type: 'function',
+                        name,
+                        description: `The tool ${name} of the project.`,
+                        parameters: { type: 'object', properties: {}, additionalProperties: true },
+                    }
         )),
         schema: schema === undefined ? (spec?.role?.schema ?? null) : schema,
         schemaName: spec?.role?.schemaName ?? 'response',

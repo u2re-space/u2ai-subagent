@@ -11,11 +11,13 @@
     "./profiles": "./src/config/profiles.js",
     "./shared": "./src/shared/shared.js",
     "./worker": "./src/shared/worker.js",
+    "./code-mode": "./src/shared/code-mode.js",
     "./ramdisk": "./src/access/ramdisk.js"
   },
   "bin": {
     "ai-subagent": "./bin/ai-subagent.js",
-    "ai-subagent-worker": "./bin/ai-subagent-worker.js"
+    "ai-subagent-worker": "./bin/ai-subagent-worker.js",
+    "ai-code-mode-worker": "./bin/ai-code-mode-worker.js"
   },
   "repository": {
     "type": "git",

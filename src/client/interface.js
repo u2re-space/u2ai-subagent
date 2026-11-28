@@ -313,3 +313,25 @@ export async function createSubAgent(request = {}) {
 }
 
 export { parentPort };
+
+// --- Code Mode: the sandbox of the model, and the tool that runs its programs -----------
+export {
+    CODE_MODE_VERSION,
+    CODE_MODE_LIMITS,
+    CodeModeError,
+    createCodeModeSpec,
+    normalizeCodeMode,
+    runCodeMode,
+    runCodeModeWorker,
+    codeModeMain,
+    startCodeModeWorker,
+    codeModeEntry,
+} from '../shared/code-mode.js';
+
+export {
+    CODE_MODE_TOOL,
+    codeModeToolSpec,
+    codeModeInstruction,
+    createCodeModeRunner,
+    codeModeBudgetFor,
+} from '../agent/code-mode.js';

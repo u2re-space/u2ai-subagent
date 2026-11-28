@@ -29,6 +29,8 @@ export const SUBAGENT_TOOLS = Object.freeze([
     'list_files', 'read_file', 'find_line', 'search_files',
     'write_file', 'replace_text', 'patch_file', 'batch', 'delete_file', 'make_dir', 'copy_path',
     'read_skill', 'call_ai_memory',
+    // Code Mode: the model writes a program, and the program runs in a sandbox of its own.
+    'code_mode',
 ]);
 
 /**
